@@ -32,6 +32,61 @@ function stripTrailing(p: string): string {
 	return p.replace(/[)"'`,.]+$/, "");
 }
 
+/** A screenshot path paired with the page it was taken on. */
+export interface ShotContext {
+	path: string;
+	url?: string;
+	title?: string;
+}
+
+/**
+ * Pair each screenshot with the page it belongs to by walking the output in
+ * order: a screenshot inherits the most recent preceding pageInfo. This keeps
+ * multi-page heredocs (open A, shoot, open B, shoot, ...) from labelling every
+ * shot with the last URL seen.
+ */
+export function extractShotContexts(text: string): ShotContext[] {
+	const events: Array<{ idx: number; url?: string; title?: string; path?: string }> = [];
+
+	const objRe = /\{[^{}]*"url"\s*:\s*"[^"]+"[^{}]*\}/g;
+	for (const m of text.matchAll(objRe)) {
+		try {
+			const obj = JSON.parse(m[0]) as { url?: string; title?: string };
+			if (obj.url && /^https?:/i.test(obj.url)) {
+				events.push({ idx: m.index ?? 0, url: obj.url, title: obj.title });
+			}
+		} catch {
+			// not valid JSON, skip
+		}
+	}
+
+	const egoShot = /\/[^\s"'`]*ego-browser-shot-[\w.-]+\.png/g;
+	for (const m of text.matchAll(egoShot)) {
+		events.push({ idx: m.index ?? 0, path: stripTrailing(m[0]) });
+	}
+	const genericPng = /(?:^|[\s"'`=(])(\/[^\s"'`)]+\.png)/g;
+	for (const m of text.matchAll(genericPng)) {
+		events.push({ idx: (m.index ?? 0) + m[0].indexOf(m[1]), path: stripTrailing(m[1]) });
+	}
+
+	events.sort((a, b) => a.idx - b.idx);
+
+	const out: ShotContext[] = [];
+	const seen = new Set<string>();
+	let curUrl: string | undefined;
+	let curTitle: string | undefined;
+	for (const ev of events) {
+		if (ev.path === undefined) {
+			curUrl = ev.url;
+			curTitle = ev.title;
+		} else if (!seen.has(ev.path)) {
+			seen.add(ev.path);
+			out.push({ path: ev.path, url: curUrl, title: curTitle });
+		}
+	}
+	return out;
+}
+
 /**
  * Pull {url,title,...} objects out of pageInfo()/JSON output.
  * ego-browser's pageInfo resolves to { url, title, w, h, ... }.

@@ -7,7 +7,7 @@ import {
 	contentToText,
 	extractNavTargets,
 	extractPageInfos,
-	extractScreenshotPaths,
+	extractShotContexts,
 	extractSpaceEvents,
 	isEgoCommand,
 } from "./parse.ts";
@@ -118,10 +118,14 @@ export default function (pi: ExtensionAPI) {
 			store.addNav({ url: (event.input as { url: string }).url, ts: Date.now(), taskSpace: EGO_SPACE });
 		}
 
-		// 3) screenshots
+		// 3) screenshots, each paired with the page it was taken on
 		const added: Shot[] = [];
-		for (const p of extractScreenshotPaths(text)) {
-			const shot = store.addShot(p, { toolCallId: event.toolCallId });
+		for (const sc of extractShotContexts(text)) {
+			const shot = store.addShot(sc.path, {
+				toolCallId: event.toolCallId,
+				url: sc.url,
+				title: sc.title,
+			});
 			if (shot) added.push(shot);
 		}
 
