@@ -1,0 +1,88 @@
+import type { NavEvent, SpaceAction, SpaceEvent } from "./types.ts";
+
+/** True when a bash command is driving the ego-lite browser. */
+export function isEgoCommand(command: string | undefined): boolean {
+	if (!command) return false;
+	return /\bego-browser\b/.test(command) && /\bnodejs\b/.test(command);
+}
+
+/** Collect text from a tool result's content blocks. */
+export function contentToText(content: Array<{ type: string; text?: string }>): string {
+	return content
+		.map((c) => (c.type === "text" && typeof c.text === "string" ? c.text : ""))
+		.join("\n");
+}
+
+/**
+ * Find screenshot file paths in ego-browser output.
+ * Matches the canonical ego-browser-shot-*.png names plus any absolute .png
+ * path (captureScreenshot can be pointed at a custom path).
+ */
+export function extractScreenshotPaths(text: string): string[] {
+	const found = new Set<string>();
+	const egoShot = /\/[^\s"'`]*ego-browser-shot-[\w.-]+\.png/g;
+	for (const m of text.matchAll(egoShot)) found.add(stripTrailing(m[0]));
+	// generic absolute png paths (e.g. custom captureScreenshot targets)
+	const genericPng = /(?:^|[\s"'`=(])(\/[^\s"'`)]+\.png)/g;
+	for (const m of text.matchAll(genericPng)) found.add(stripTrailing(m[1]));
+	return [...found];
+}
+
+function stripTrailing(p: string): string {
+	return p.replace(/[)"'`,.]+$/, "");
+}
+
+/**
+ * Pull {url,title,...} objects out of pageInfo()/JSON output.
+ * ego-browser's pageInfo resolves to { url, title, w, h, ... }.
+ */
+export function extractPageInfos(text: string): NavEvent[] {
+	const out: NavEvent[] = [];
+	const objRe = /\{[^{}]*"url"\s*:\s*"[^"]+"[^{}]*\}/g;
+	for (const m of text.matchAll(objRe)) {
+		try {
+			const obj = JSON.parse(m[0]) as { url?: string; title?: string };
+			if (obj.url && /^https?:/i.test(obj.url)) {
+				out.push({ url: obj.url, title: obj.title, ts: Date.now() });
+			}
+		} catch {
+			// not valid JSON, skip
+		}
+	}
+	return out;
+}
+
+/**
+ * Navigation targets taken from the script itself (openOrReuseTab/gotoAndWait/
+ * gotoUrl). These give URLs even when the agent never logs pageInfo.
+ */
+export function extractNavTargets(command: string): NavEvent[] {
+	const out: NavEvent[] = [];
+	const re =
+		/\b(?:openOrReuseTab|gotoAndWait|gotoUrl|ensureRealTab)\s*\(\s*(['"`])(https?:\/\/[^'"`]+)\1/g;
+	for (const m of command.matchAll(re)) {
+		out.push({ url: m[2], ts: Date.now() });
+	}
+	return out;
+}
+
+const SPACE_HELPERS: Array<{ re: RegExp; action: SpaceAction }> = [
+	{ re: /\buseOrCreateTaskSpace\s*\(\s*(['"`])([^'"`]+)\1/g, action: "create" },
+	{ re: /\bnewTaskSpace\s*\(\s*(['"`])([^'"`]+)\1/g, action: "create" },
+	{ re: /\bclaimTaskSpace\s*\(\s*(['"`])([^'"`]+)\1/g, action: "takeover" },
+	{ re: /\bswitchTaskSpace\s*\(\s*(['"`])([^'"`]+)\1/g, action: "reuse" },
+	{ re: /\btakeOverTaskSpace\s*\(\s*(['"`])([^'"`]+)\1/g, action: "takeover" },
+	{ re: /\bhandOffTaskSpace\s*\(\s*(['"`])([^'"`]+)\1/g, action: "handoff" },
+	{ re: /\bcompleteTaskSpace\s*\(\s*(['"`])([^'"`]+)\1/g, action: "complete" },
+];
+
+/** Task-space lifecycle events inferred from the script source. */
+export function extractSpaceEvents(command: string): SpaceEvent[] {
+	const out: SpaceEvent[] = [];
+	for (const { re, action } of SPACE_HELPERS) {
+		for (const m of command.matchAll(re)) {
+			out.push({ name: m[2], action, ts: Date.now() });
+		}
+	}
+	return out;
+}

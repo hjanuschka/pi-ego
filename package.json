@@ -1,0 +1,25 @@
+{
+  "name": "pi-ego",
+  "version": "0.1.0",
+  "description": "Persistent browser-session layer for the ego-lite ego-browser skill: screenshot gallery, task-space dashboard, HTML export, and learnings recorder for the Pi coding agent.",
+  "type": "module",
+  "license": "MIT",
+  "author": "hjanuschka",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hjanuschka/pi-ego.git"
+  },
+  "keywords": [
+    "pi",
+    "pi-coding-agent",
+    "extension",
+    "ego-lite",
+    "ego-browser",
+    "browser-automation"
+  ],
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
+}
