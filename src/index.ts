@@ -31,6 +31,21 @@ interface Settings {
 	autocapture: boolean; // auto-screenshot after navigations with no shot
 }
 
+// Matches a single <skill>...</skill> block in the system prompt.
+const SKILL_BLOCK = /\n?[ \t]*<skill>(?:(?!<\/skill>)[\s\S])*?<\/skill>/g;
+
+/**
+ * Drop the heredoc-based ego-browser skill from the system prompt. The ego-lite
+ * app auto-installs it under ~/.agents/skills/ego-browser, where it duplicates
+ * the ego_* tools this extension already provides; leaving both in the prompt
+ * just pushes the model toward the bash-heredoc workflow.
+ */
+function stripEgoSkill(prompt: string): string {
+	return prompt.replace(SKILL_BLOCK, (block) =>
+		/ego-browser|[\/.]agents\/skills\/ego/i.test(block) ? "" : block,
+	);
+}
+
 export default function (pi: ExtensionAPI) {
 	let store: EgoStore | undefined;
 	const settings: Settings = { inline: false, autocapture: false };
@@ -47,6 +62,12 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	registerEgoTools(pi);
+
+	pi.on("before_agent_start", (event) => {
+		const next = stripEgoSkill(event.systemPrompt);
+		if (next === event.systemPrompt) return;
+		return { systemPrompt: next };
+	});
 
 	function refreshWidget(ctx: ExtensionContext): void {
 		if (!ctx.hasUI || !store) return;
