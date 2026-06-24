@@ -138,6 +138,12 @@ main{max-width:1240px;margin:auto;padding:1.4rem 1.2rem 5rem}
 .scard .row{display:flex;justify-content:space-between;color:var(--dim);font-size:.82rem;margin:.15rem 0}
 .scard .mini{display:flex;gap:.3rem;margin-top:.6rem;flex-wrap:wrap}
 .scard .mini img{width:46px;height:32px;object-fit:cover;border-radius:5px;border:1px solid var(--line)}
+.trail{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;margin-top:.7rem;padding-top:.6rem;border-top:1px dashed var(--line)}
+.trail .step{display:inline-flex;align-items:center;gap:.25rem;font-size:.72rem;font-weight:600;background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:.08rem .5rem}
+.trail .step .tt{color:var(--dim);font-weight:500}
+.trail .step.create{color:var(--ok)} .trail .step.complete{color:var(--dim)}
+.trail .step.handoff{color:var(--warn)} .trail .step.takeover{color:var(--brand2)} .trail .step.reuse{color:var(--accent)}
+.trail .arr{color:var(--dim);font-size:.8rem}
 .live{width:.55rem;height:.55rem;border-radius:50%;display:inline-block}
 .live.on{background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 30%,transparent)}
 .live.off{background:var(--dim)}
@@ -164,6 +170,8 @@ const JS = String.raw`
   var D = window.__EGO__ || {shots:[],spaces:[],navs:[]};
   var shots = D.shots||[], spaces = D.spaces||[], navs = D.navs||[];
   var state = {view:'gallery', group:'space', space:'all', domain:'all', q:''};
+
+  var ACT_ICON={create:'➕',reuse:'♻️',complete:'✅',handoff:'🤝',takeover:'✋'};
 
   function domainOf(u){ try{ return new URL(u).hostname.replace(/^www\./,''); }catch(e){ return ''; } }
   function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
@@ -246,11 +254,10 @@ const JS = String.raw`
     var evs=timelineEvents();
     if(!evs.length) return '<div class=empty>No events match your filters.</div>';
     var flist=filtered();
-    var icon={create:'➕',reuse:'♻️',complete:'✅',handoff:'🤝',takeover:'✋'};
     var rows=evs.map(function(e){
       if(e.kind==='space'){
         var label={create:'created task space',reuse:'reused task space',complete:'completed task space',handoff:'handed off to user',takeover:'took over task space'}[e.action]||e.action;
-        return '<div class="ev space"><div class=ic>'+(icon[e.action]||'•')+'</div><div class=body>'
+        return '<div class="ev space"><div class=ic>'+(ACT_ICON[e.action]||'•')+'</div><div class=body>'
           +'<div class=head><span class="badge '+e.action+'">'+e.action+'</span> '+esc(label)+' <span class=pill>'+esc(e.name)+'</span></div>'
           +'<div class=when>'+esc(fmt(e.ts))+'</div></div></div>';
       }
@@ -280,8 +287,27 @@ const JS = String.raw`
         +'<div class=row><span>lifecycle events</span><b>'+c.events+'</b></div>'
         +'<div class=row><span>screenshots</span><b>'+sshots.length+'</b></div>'
         +'<div class=row><span>last activity</span><b>'+esc(fmtT(c.lastTs))+'</b></div>'
+        +lifecycleTrail(c.name)
         +(mini?'<div class=mini>'+mini+'</div>':'')+'</div>';
     }).join('')+'</div>';
+  }
+
+  // Ordered lifecycle trail for one space, collapsing consecutive repeats
+  // (e.g. a burst of reuse events) into a single "reuse ×N" step.
+  function lifecycleTrail(name){
+    var evs=spaces.filter(function(e){return e.name===name;}).sort(function(a,b){return a.ts-b.ts;});
+    if(!evs.length) return '';
+    var steps=[];
+    evs.forEach(function(e){
+      var last=steps[steps.length-1];
+      if(last && last.action===e.action){ last.count++; last.ts=e.ts; }
+      else steps.push({action:e.action,count:1,ts:e.ts});
+    });
+    var html=steps.map(function(s){
+      return '<span class="step '+s.action+'" title="'+esc(fmt(s.ts))+'">'+(ACT_ICON[s.action]||'•')+' '+s.action
+        +(s.count>1?' ×'+s.count:'')+' <span class=tt>'+esc(fmtT(s.ts))+'</span></span>';
+    }).join('<span class=arr>→</span>');
+    return '<div class=trail>'+html+'</div>';
   }
 
   function body(){
