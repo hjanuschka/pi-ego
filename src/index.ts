@@ -15,7 +15,8 @@ import { GalleryComponent } from "./gallery.ts";
 import { SpacesComponent } from "./spaces.ts";
 import { exportHtml } from "./export.ts";
 import { domainsSeen, recordLearning } from "./learn.ts";
-import { EGO_SPACE, registerEgoTools, runEgo } from "./tools.ts";
+import { egoSpaceForSession, egoTaskPrelude } from "./session-space.ts";
+import { registerEgoTools, runEgo } from "./tools.ts";
 import type { Shot } from "./types.ts";
 
 /**
@@ -102,12 +103,13 @@ export default function (pi: ExtensionAPI) {
 		if (!isEgoTool && !isEgoCommand(command)) return;
 
 		const text = contentToText(event.content as Array<{ type: string; text?: string }>);
+		const currentSpace = egoSpaceForSession(ctx.sessionManager.getSessionId());
 
 		// 1) task-space lifecycle (from the script source)
 		if (command) {
 			for (const ev of extractSpaceEvents(command)) store.addSpaceEvent(ev);
 		} else if (isEgoTool) {
-			store.addSpaceEvent({ name: EGO_SPACE, action: "reuse", ts: Date.now() });
+			store.addSpaceEvent({ name: currentSpace, action: "reuse", ts: Date.now() });
 		}
 
 		// 2) navigation: prefer logged pageInfo, fall back to script targets
@@ -115,7 +117,11 @@ export default function (pi: ExtensionAPI) {
 		const space = store.lastSpace();
 		for (const n of navs) store.addNav({ ...n, taskSpace: n.taskSpace ?? space });
 		if (isEgoTool && typeof (event.input as { url?: string }).url === "string") {
-			store.addNav({ url: (event.input as { url: string }).url, ts: Date.now(), taskSpace: EGO_SPACE });
+			store.addNav({
+				url: (event.input as { url: string }).url,
+				ts: Date.now(),
+				taskSpace: currentSpace,
+			});
 		}
 
 		// 3) screenshots, each paired with the page it was taken on
@@ -131,7 +137,7 @@ export default function (pi: ExtensionAPI) {
 
 		// 4) auto-capture safety net
 		if (settings.autocapture && added.length === 0 && navs.length > 0) {
-			const shot = await autoCapture(store, event.toolCallId);
+			const shot = await autoCapture(store, event.toolCallId, currentSpace);
 			if (shot) added.push(shot);
 		}
 
@@ -292,10 +298,13 @@ function maybeInline(pi: ExtensionAPI, settings: Settings, shot: Shot): void {
 }
 
 /** Reuse the agent task space to grab a screenshot the agent forgot to take. */
-async function autoCapture(store: EgoStore, toolCallId: string): Promise<Shot | null> {
+async function autoCapture(
+	store: EgoStore,
+	toolCallId: string,
+	egoSpace: string,
+): Promise<Shot | null> {
 	const { ok, out } = await runEgo(
-		`const task = await useOrCreateTaskSpace(${JSON.stringify(EGO_SPACE)})
-const tab = await ensureRealTab()
+		`${egoTaskPrelude(egoSpace)}const tab = await ensureRealTab()
 if (tab) {
   const shot = await captureScreenshot()
   cliLog('screenshot path: ' + shot)
