@@ -38,7 +38,8 @@ indexes:
   title, timestamp, and task space.
 - **Navigations** -- from logged `pageInfo()` and from `openOrReuseTab(...)` etc.
 - **Task spaces** -- `useOrCreateTaskSpace` / `completeTaskSpace` / `handOff...`
-  lifecycle.
+  lifecycle. The built-in `ego_*` tools bind to a unique `pi-agent:<sessionId>`
+  space, so concurrent Pi sessions do not share page or tab state.
 
 Everything persists to `index.json`, so the views survive `/reload`.
 
@@ -54,7 +55,7 @@ Everything persists to `index.json`, so the views survive `/reload`.
 
 ## Tools (callable by the model)
 
-- `ego_open(url)` -- open/reuse a URL in the agent task space, return pageInfo + snapshot.
+- `ego_open(url)` -- open/reuse a URL in this Pi session's isolated agent task space, return pageInfo + snapshot.
 - `ego_snapshot()` -- fresh semantic snapshot of the current page.
 - `ego_screenshot(full?)` -- capture a PNG (auto-added to the gallery).
 - `ego_click(target, label?)` -- click a selector/ref/locator, re-snapshot.

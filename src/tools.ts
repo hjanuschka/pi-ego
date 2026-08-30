@@ -1,18 +1,16 @@
 import { spawn } from "node:child_process";
 import { Type } from "typebox";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { egoTaskPreludeForSession } from "./session-space.ts";
 
 /**
  * Typed wrappers around `ego-browser nodejs`. They give the model first-class
  * ego_* tools (instead of hand-written heredocs), and every result still flows
  * through the same tool_result indexer that powers the gallery/spaces views.
  *
- * All tools reuse one task space so a sequence of calls operates on the same
- * page, mirroring how the skill tells agents to work.
+ * All tools in one Pi session reuse that session's task space so a sequence of
+ * calls operates on the same page without colliding with another Pi session.
  */
-
-export const EGO_SPACE = "pi-agent";
-const SPACE = EGO_SPACE;
 
 export function runEgo(body: string, timeoutMs = 60000): Promise<{ ok: boolean; out: string }> {
 	return new Promise((resolve) => {
@@ -43,11 +41,10 @@ export function runEgo(body: string, timeoutMs = 60000): Promise<{ ok: boolean; 
 	});
 }
 
-function header(): string {
-	return `const task = await useOrCreateTaskSpace(${JSON.stringify(SPACE)})\n`;
-}
-
 export function registerEgoTools(pi: ExtensionAPI): void {
+	function header(sessionId: string): string {
+		return egoTaskPreludeForSession(sessionId);
+	}
 	pi.registerTool({
 		name: "ego_open",
 		label: "ego open",
@@ -60,9 +57,9 @@ export function registerEgoTools(pi: ExtensionAPI): void {
 		parameters: Type.Object({
 			url: Type.String({ description: "Absolute URL to open." }),
 		}),
-		async execute(_id, { url }) {
+		async execute(_id, { url }, _signal, _onUpdate, ctx) {
 			const { ok, out } = await runEgo(
-				`${header()}await openOrReuseTab(${JSON.stringify(url)}, { wait: true, timeout: 25 })
+				`${header(ctx.sessionManager.getSessionId())}await openOrReuseTab(${JSON.stringify(url)}, { wait: true, timeout: 25 })
 cliLog(JSON.stringify(await pageInfo()))
 cliLog('---SNAPSHOT---')
 cliLog(await snapshotText())\n`,
@@ -78,9 +75,9 @@ cliLog(await snapshotText())\n`,
 			"Return a fresh semantic snapshot (annotated with refs/locators) of the ego-lite browser's current page.",
 		promptSnippet: "Snapshot the current ego-lite page",
 		parameters: Type.Object({}),
-		async execute() {
+		async execute(_id, _params, _signal, _onUpdate, ctx) {
 			const { ok, out } = await runEgo(
-				`${header()}await ensureRealTab()
+				`${header(ctx.sessionManager.getSessionId())}await ensureRealTab()
 cliLog(JSON.stringify(await pageInfo()))
 cliLog('---SNAPSHOT---')
 cliLog(await snapshotText())\n`,
@@ -100,9 +97,9 @@ cliLog(await snapshotText())\n`,
 				Type.Boolean({ description: "Capture the full scrollable page (default false)." }),
 			),
 		}),
-		async execute(_id, { full }) {
+		async execute(_id, { full }, _signal, _onUpdate, ctx) {
 			const { ok, out } = await runEgo(
-				`${header()}await ensureRealTab()
+				`${header(ctx.sessionManager.getSessionId())}await ensureRealTab()
 const info = await pageInfo()
 cliLog(JSON.stringify(info))
 const shot = await captureScreenshot(undefined, { full: ${full ? "true" : "false"} })
@@ -124,10 +121,10 @@ cliLog('screenshot path: ' + shot)\n`,
 			}),
 			label: Type.Optional(Type.String({ description: "Short action description for the click highlight." })),
 		}),
-		async execute(_id, { target, label }) {
+		async execute(_id, { target, label }, _signal, _onUpdate, ctx) {
 			const lbl = label ? `, { label: ${JSON.stringify(label)} }` : "";
 			const { ok, out } = await runEgo(
-				`${header()}await ensureRealTab()
+				`${header(ctx.sessionManager.getSessionId())}await ensureRealTab()
 await click(${JSON.stringify(target)}${lbl})
 await wait(0.5)
 cliLog(JSON.stringify(await pageInfo()))
