@@ -1,8 +1,16 @@
 {
   "name": "pi-ego",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Persistent browser-session layer for the ego-lite ego-browser skill: screenshot gallery, task-space dashboard, HTML export, and learnings recorder for the Pi coding agent.",
   "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.ts"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-tui": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
   "license": "MIT",
   "author": "hjanuschka",
   "repository": {
